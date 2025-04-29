@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% load widget_tweaks %}
+
+{% block title %}Upload de Arquivo{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="mb-4">
+    {% csrf_token %}
+    <div class="mb-3">
+        {{ form.file.label_tag }}
+        {% render_field form.file class="form-control" %}
+    </div>
+    <div class="mb-3">
+        {{ form.query.label_tag }}
+        {% render_field form.query class="form-control" %}
+    </div>
+    <button type="submit" class="btn btn-primary">Enviar CSV</button>
+</form>
+
+{% if agent_response %}
+    <h2 class="mt-5">Resposta do Agente</h2>
+    <p>{{ agent_response }}</p>
+{% endif %}
+
+{% if data %}
+    <h2 class="mt-5">Conteúdo do Arquivo</h2>
+    <table class="table table-striped table-hover mt-3">
+        <thead>
+            <tr>
+                {% for col in header %}
+                    <th>{{ col }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in data %}
+                <tr>
+                    {% for cell in row %}
+                        <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endif %}
+{% endblock %}

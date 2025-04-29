@@ -1,1 +1,1 @@
-pip install openai openai-whisper python-dotenv pynput tabulate sounddevice soundfile numpy pandas langchain langchain-openai langchain-experimental
+pip install openai python-dotenv tabulate sounddevice numpy pandas langchain langchain-openai langchain-experimental
