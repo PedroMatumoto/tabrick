@@ -10,11 +10,20 @@
         {{ form.file.label_tag }}
         {% render_field form.file class="form-control" %}
     </div>
+    <button type="submit" name="action" value="upload_file" class="btn btn-primary mb-4">Enviar CSV</button>
+</form>
+
+<form method="post" class="mb-4">
+    {% csrf_token %}
     <div class="mb-3">
-        {{ form.query.label_tag }}
-        {% render_field form.query class="form-control" %}
+        {{ form.context.label_tag }}
+        {% render_field form.context class="form-control" %}
     </div>
-    <button type="submit" class="btn btn-primary">Enviar CSV</button>
+    <div class="mb-3">
+        {{ form.question.label_tag }}
+        {% render_field form.question class="form-control" %}
+    </div>
+    <button type="submit" name="action" value="ask_question" class="btn btn-primary">Enviar Pergunta</button>
 </form>
 
 {% if agent_response %}
