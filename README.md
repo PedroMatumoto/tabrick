@@ -4,6 +4,10 @@
 
 **Tabrick** is a project developed in Python that aims to analyze and visualize data in a practical way, enabling the generation of insights. By using popular libraries like `pandas` and `matplotlib`, the project allows the reading, processing, and visualization of data contained in CSV files.
 
+# Demo Video
+https://github.com/user-attachments/assets/f23bfd36-1a87-47a1-804d-7e17d52cb008
+
+
 ## Project Structure
 
 - `tabrick.py`: Folder containing the Django application
