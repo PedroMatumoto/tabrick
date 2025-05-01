@@ -1,1 +1,0 @@
-pip install openai python-dotenv tabulate sounddevice numpy pandas langchain langchain-openai langchain-experimental

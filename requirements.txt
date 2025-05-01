@@ -1,0 +1,11 @@
+openai
+python-dotenv
+tabulate
+sounddevice
+numpy
+pandas
+langchain
+langchain-openai
+langchain-experimental
+markdown
+django-widget-tweaks
