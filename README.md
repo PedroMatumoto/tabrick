@@ -2,17 +2,17 @@
 
 # Tabrick
 
-**Tabrick** é um projeto desenvolvido em Python que visa analisar e visualizar dados de forma prática, permitindo a geração de insights. Utilizando bibliotecas populares como `pandas` e `matplotlib`, o projeto permite a leitura, tratamento e visualização de dados contidos em arquivos CSV.
+**Tabrick** is a project developed in Python that aims to analyze and visualize data in a practical way, enabling the generation of insights. By using popular libraries like `pandas` and `matplotlib`, the project allows the reading, processing, and visualization of data contained in CSV files.
 
-## Estrutura do Projeto
+## Project Structure
 
-- `tabrick.py`: Script principal que contém as funções para leitura, processamento e visualização dos dados.
-- `df_rent.csv`: Arquivo CSV contendo os dados de aluguel a serem analisados.
-- `libs.txt`: Lista de bibliotecas necessárias para executar o projeto.
+- `tabrick.py`: Folder containing the Django application
+- `data`: Folder with test datasets
+- `requirements.txt`: List of libraries required to run the project.
 
 ## 🚀 Como Executar
 
-1. Clone o repositório:
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/PedroMatumoto/tabrick.git
@@ -20,26 +20,26 @@
 
    ```
 
-2. Crie um ambiente virtual
+2. Create a virtual environment:
 
    ```bash
    python -m venv venv
    \venv\scripts\activate
    ```
 
-3. Instale as dependências:
+3. Install the dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Entre na pasta da aplicação
+4. Navigate to the application folder:
 
    ```bash
    cd tabrick
    ```
 
-5. Rode a aplicação django
+5. Run the Django application:
    ```bash
    python manage.py runserver
    ```
