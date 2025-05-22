@@ -11,7 +11,7 @@ Arquivo{% endblock %} {% block content %}
     value="upload_file"
     class="btn btn-primary mb-4"
   >
-    Enviar CSV
+    Enviar Arquivo
   </button>
 </form>
 
@@ -19,11 +19,15 @@ Arquivo{% endblock %} {% block content %}
   {% csrf_token %}
   <div class="mb-3">
     <label for="context">Contexto:</label>
-    {% render_field form.context class="form-control" %}
+    {% render_field query_form.context class="form-control" %}
+  </div>
+  <div class="mb-3">
+    <label for="pdf_query">Consulta para PDF:</label>
+    {% render_field query_form.pdf_query class="form-control" %}
   </div>
   <div class="mb-3">
     <label for="question">Pergunta:</label>
-    {% render_field form.question class="form-control" %}
+    {% render_field query_form.question class="form-control" %}
   </div>
   <button
     type="submit"
@@ -36,10 +40,67 @@ Arquivo{% endblock %} {% block content %}
 </form>
 
 {% if agent_response %}
-<h2 class="mt-5">Resposta do Agente</h2>
-<div class="agent-response mt-3">{{ agent_response|safe }}</div>
-{% endif %} {% if data %}
-<h2 class="mt-5">Conteúdo do Arquivo</h2>
+    <div class="agent-full-response mt-4">
+        <h3>Resposta:</h3>
+        {{ agent_response|safe }}
+    </div>
+{% endif %}
+
+{% if table_response %}
+    <div class="agent-table-response mt-4">
+        <h3>Tabela de Resultados:</h3>
+        {{ table_response|safe }}
+        <a href="#" class="btn btn-success mt-2" onclick="exportTableToCSV('tabela_resposta.csv')">Baixar Tabela</a>
+    </div>
+{% endif %}
+
+{% if rag_sources %}
+    <div class="rag-sources mt-4">
+        <h3>Fontes Consultadas:</h3>
+        <div class="accordion" id="sourcesAccordion">
+            {% for source in rag_sources %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#source{{ forloop.counter }}" aria-expanded="false">
+                        Fonte {{ forloop.counter }} (Página: {{ source.page }})
+                    </button>
+                </h2>
+                <div id="source{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#sourcesAccordion">
+                    <div class="accordion-body">
+                        <pre class="source-content">{{ source.content }}</pre>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+
+{% if conversation_history %}
+    <h3 class="mt-4">Histórico da Conversa</h3>
+    <div class="conversation-history">
+        <form method="POST" style="margin-bottom: 15px;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="clear_chroma">
+            <button type="submit" class="btn btn-danger">Limpar Base de Conhecimento</button>
+        </form>
+        {% for item in conversation_history %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Pergunta:</strong> {{ item.question }}
+                </div>
+                <div class="card-body">
+                    <strong>Resposta:</strong> 
+                    <div>{{ item.response|safe }}</div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+{% if data %}
+<h2 class="mt-5">Conteúdo do Arquivo CSV</h2>
 <table class="table table-striped table-hover mt-3">
   <thead>
     <tr>
@@ -58,4 +119,5 @@ Arquivo{% endblock %} {% block content %}
     {% endfor %}
   </tbody>
 </table>
-{% endif %} {% endblock %}
+{% endif %}
+{% endblock %}

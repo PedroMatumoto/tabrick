@@ -9,3 +9,7 @@ langchain-openai
 langchain-experimental
 markdown
 django-widget-tweaks
+chromadb
+langchain
+langchain_openai
+pypdf
