@@ -7,12 +7,42 @@ Arquivo{% endblock %}
   document.addEventListener('DOMContentLoaded', function() {
     // Adicionar handler para botões de exclusão de arquivo
     document.addEventListener('click', function(event) {
-      const deleteBtn = event.target.closest('button[name="action"][value="delete_file"]');
+      const deleteBtn = event.target.closest('.delete-file-btn');
       if (deleteBtn) {
         if(!confirm('Tem certeza que deseja excluir este arquivo?')) {
-          event.preventDefault();
           return;
         }
+        
+        // Criar um formulário dinamicamente para executar a ação de exclusão
+        const fileName = deleteBtn.getAttribute('data-filename');
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.style.display = 'none';
+        
+        // Adicionar token CSRF
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
+        
+        // Adicionar nome do arquivo e ação
+        const fileNameInput = document.createElement('input');
+        fileNameInput.type = 'hidden';
+        fileNameInput.name = 'file_name';
+        fileNameInput.value = fileName;
+        form.appendChild(fileNameInput);
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'delete_file';
+        form.appendChild(actionInput);
+        
+        // Adicionar o formulário ao documento e enviá-lo
+        document.body.appendChild(form);
+        form.submit();
       }
     });
   });
@@ -52,8 +82,7 @@ Arquivo{% endblock %}
     <label for="selected_files">{{ query_form.selected_files.label }}:</label>
     <div class="checkbox-group">
       <ul>
-        {% for value, text in query_form.selected_files.field.choices %}
-          <li class="d-flex justify-content-between align-items-center">
+        {% for value, text in query_form.selected_files.field.choices %}      <li class="d-flex justify-content-between align-items-center">
             <div class="file-item">
               <input type="checkbox" name="selected_files" value="{{ value }}" id="id_selected_files_{{ forloop.counter0 }}" class="form-check-input" 
                 {% if value in query_form.selected_files.value %}checked{% endif %}>
@@ -69,13 +98,9 @@ Arquivo{% endblock %}
               </label>
             </div>
             <div class="file-actions">
-              <form method="post" class="delete-file-form d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="file_name" value="{{ value }}">
-                <button type="submit" name="action" value="delete_file" class="btn btn-danger btn-sm" title="Excluir arquivo">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </form>
+              <button type="button" class="btn btn-danger btn-sm delete-file-btn" data-filename="{{ value }}" title="Excluir arquivo">
+                <i class="fas fa-trash"></i>
+              </button>
             </div>
           </li>
         {% empty %}
@@ -135,12 +160,30 @@ Arquivo{% endblock %}
 
 {% if conversation_history %}
     <h3 class="mt-4">Histórico da Conversa</h3>
-    <div class="conversation-history">
-        <form method="POST" style="margin-bottom: 15px;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="d-flex">
+            <form method="POST" class="me-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="clear_chroma">
+                <button type="submit" class="btn btn-danger btn-sm">Limpar Base de Conhecimento</button>
+            </form>
+            
+            <form method="POST" class="me-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reset_chroma">
+                <button type="submit" class="btn btn-danger btn-sm" title="Use apenas em caso de erros graves com a base de conhecimento">
+                    <i class="fas fa-exclamation-triangle"></i> Reset de Emergência
+                </button>
+            </form>
+        </div>
+        
+        <form method="POST">
             {% csrf_token %}
-            <input type="hidden" name="action" value="clear_chroma">
-            <button type="submit" class="btn btn-danger">Limpar Base de Conhecimento</button>
+            <input type="hidden" name="action" value="clear_conversation">
+            <button type="submit" class="btn btn-warning btn-sm">Limpar Histórico da Conversa</button>
         </form>
+    </div>
+    <div class="conversation-history">
         {% for item in conversation_history %}
             <div class="card mb-3">
                 <div class="card-header">
@@ -177,3 +220,10 @@ Arquivo{% endblock %}
 </table>
 {% endif %}
 {% endblock %}
+
+<!-- Formulário oculto para exclusão de arquivos -->
+<form id="delete_file_form" method="post" style="display: none;">
+  {% csrf_token %}
+  <input type="hidden" id="file_name_to_delete" name="file_name" value="">
+  <input type="hidden" name="action" value="delete_file">
+</form>

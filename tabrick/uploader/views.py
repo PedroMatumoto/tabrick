@@ -349,6 +349,18 @@ def upload_file(request):
                                         Responda de forma completa, utilizando todos os dados disponíveis no dataframe.
                                         Mostre exemplos específicos quando relevante.
                                         """
+
+                                    system_prompt = """Você é um assistente especializado em análise de dados que fala português.
+                                    Sua tarefa é analisar dataframes pandas e responder perguntas sobre eles em português.
+                                    Ao analisar dados:
+                                    1. Examine cuidadosamente as colunas do dataframe para entender a estrutura dos dados
+                                    2. Execute análises estatísticas quando necessário (média, mediana, contagens, etc)
+                                    3. Crie visualizações descritivas em forma de tabelas markdown quando apropriado
+                                    4. Se encontrar problemas nos dados, explique-os claramente
+                                    5. Forneça exemplos concretos dos dados para apoiar suas conclusões
+                                    
+                                    Importante: O usuário está consultando em português, então responda em português também.
+                                    """
                                     
                                     # Usar o agente para analisar o dataframe com o contexto
                                     agent = create_pandas_dataframe_agent(
@@ -357,6 +369,7 @@ def upload_file(request):
                                         agent_type=AgentType.OPENAI_FUNCTIONS,
                                         verbose=True,
                                         allow_dangerous_code=True,
+                                        agent_kwargs={"system_prompt": system_prompt},
                                     )
                                     
                                     csv_result = agent.invoke(full_query)
@@ -422,6 +435,21 @@ def upload_file(request):
             file_name = request.POST.get("file_name", "")
             if file_name:
                 return delete_file(request, file_name) # Ensure the redirect response is returned
+        
+        elif action == "clear_conversation":
+            if "conversation_history" in request.session:
+                del request.session["conversation_history"]
+                request.session.modified = True
+                messages.success(request, "Histórico da conversa limpo com sucesso!")
+            else:
+                messages.info(request, "O histórico da conversa já está vazio.")
+            return redirect("upload_file")
+
+        elif action == "reset_chroma":
+            # Botão de emergência para redefinir a base ChromaDB
+            reset_chroma_db_if_needed(request)
+            return redirect("upload_file")
+
     else:
         # Carregar dados de CSV se existir na sessão
         data = []
@@ -477,6 +505,33 @@ def clear_chroma(request):
     except Exception as e:
         messages.error(request, f"Erro ao limpar a base de conhecimento: {str(e)}")
 
+def reset_chroma_db_if_needed(request):
+    """Função alternativa para redefinir a base Chroma em caso de problemas críticos"""
+    try:
+        # Usar shutil para eliminar a base de dados e recriá-la vazia
+        import shutil
+        chroma_dir = os.path.join(settings.BASE_DIR, 'chroma_db')
+        if os.path.exists(chroma_dir):
+            shutil.rmtree(chroma_dir)
+            os.makedirs(chroma_dir, exist_ok=True)
+        
+        # Reinicializar o RAG system
+        global rag_system
+        rag_system = RAGSystem(openai_api_key=OPENAI_API_KEY, 
+                              persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'))
+        
+        # Limpar apenas os PDFs da sessão
+        loaded_files = request.session.get("loaded_files", {})
+        loaded_files = {k: v for k, v in loaded_files.items() if v.get("type") != "pdf"}
+        request.session["loaded_files"] = loaded_files
+        request.session.modified = True
+        
+        messages.success(request, "Base de conhecimento reinicializada com sucesso devido a problemas técnicos.")
+        return True
+    except Exception as e:
+        messages.error(request, f"Erro ao tentar reinicializar a base de conhecimento: {str(e)}")
+        return False
+
 def delete_file(request, file_name):
     try:
         # Remover arquivo da sessão
@@ -491,14 +546,20 @@ def delete_file(request, file_name):
                 
             # Se for um PDF, remover da base Chroma também
             if file_info.get("type") == "pdf":
-                rag_system.delete_document(file_name) # Adicionado
+                try:
+                    # Tentar excluir do ChromaDB - se falhar, continue mesmo assim
+                    rag_system.delete_document(file_name)
+                except Exception as chroma_error:
+                    print(f"Erro ao remover da base ChromaDB: {chroma_error}")
+                    # Não falha completamente, continua removendo da sessão
+                    messages.warning(request, f"O arquivo foi removido da sessão, mas pode haver resíduos na base de vetores. Erro: {str(chroma_error)[:100]}...")
             
             # Se for um CSV, remover da sessão de CSVs
             if file_info.get("type") == "csv":
-                csv_files = request.session.get("csv_files", {}) # Adicionado
-                if file_name in csv_files: # Adicionado
-                    del csv_files[file_name] # Adicionado
-                    request.session["csv_files"] = csv_files # Adicionado
+                csv_files = request.session.get("csv_files", {}) 
+                if file_name in csv_files:
+                    del csv_files[file_name]
+                    request.session["csv_files"] = csv_files
             
             # Remover da lista de arquivos carregados
             del loaded_files[file_name]
@@ -507,10 +568,10 @@ def delete_file(request, file_name):
             
             messages.success(request, f"Arquivo '{file_name}' removido com sucesso!")
         else:
-            messages.error(request, f"Arquivo '{file_name}' não encontrado para remoção.") # Adicionado
+            messages.error(request, f"Arquivo '{file_name}' não encontrado para remoção.")
             
     except Exception as e:
-        messages.error(request, f"Erro ao remover o arquivo '{file_name}': {str(e)}") # Mensagem de erro melhorada
+        messages.error(request, f"Erro ao remover o arquivo '{file_name}': {str(e)}")
     
     # Adicionar um parâmetro à URL para forçar a atualização da página
     response = redirect("upload_file")
