@@ -1,5 +1,25 @@
 {% extends 'base.html' %} {% load widget_tweaks %} {% block title %}Upload de
-Arquivo{% endblock %} {% block content %}
+Arquivo{% endblock %} 
+
+{% block extra_head %}
+<script>
+  // Função para atualizar a lista de seleção de arquivos
+  document.addEventListener('DOMContentLoaded', function() {
+    // Adicionar handler para botões de exclusão de arquivo
+    document.addEventListener('click', function(event) {
+      const deleteBtn = event.target.closest('button[name="action"][value="delete_file"]');
+      if (deleteBtn) {
+        if(!confirm('Tem certeza que deseja excluir este arquivo?')) {
+          event.preventDefault();
+          return;
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}
+
+{% block content %}
 <form method="post" enctype="multipart/form-data" class="mb-4">
   {% csrf_token %}
   <div class="mb-3">
@@ -28,6 +48,42 @@ Arquivo{% endblock %} {% block content %}
   <div class="mb-3">
     <label for="question">Pergunta:</label>
     {% render_field query_form.question class="form-control" %}
+  </div>  <div class="mb-3">
+    <label for="selected_files">{{ query_form.selected_files.label }}:</label>
+    <div class="checkbox-group">
+      <ul>
+        {% for value, text in query_form.selected_files.field.choices %}
+          <li class="d-flex justify-content-between align-items-center">
+            <div class="file-item">
+              <input type="checkbox" name="selected_files" value="{{ value }}" id="id_selected_files_{{ forloop.counter0 }}" class="form-check-input" 
+                {% if value in query_form.selected_files.value %}checked{% endif %}>
+              <label for="id_selected_files_{{ forloop.counter0 }}" class="form-check-label">
+                {% if '.pdf' in value %}
+                  <i class="fas fa-file-pdf file-icon file-pdf"></i>
+                {% elif '.csv' in value %}
+                  <i class="fas fa-file-csv file-icon file-csv"></i>
+                {% else %}
+                  <i class="fas fa-file file-icon"></i>
+                {% endif %}
+                {{ text }}
+              </label>
+            </div>
+            <div class="file-actions">
+              <form method="post" class="delete-file-form d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="file_name" value="{{ value }}">
+                <button type="submit" name="action" value="delete_file" class="btn btn-danger btn-sm" title="Excluir arquivo">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </li>
+        {% empty %}
+          <li class="text-muted">Nenhum arquivo disponível</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <small class="form-text text-muted">Selecione as fontes que deseja consultar.</small>
   </div>
   <button
     type="submit"

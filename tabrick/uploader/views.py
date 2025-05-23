@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import markdown
 import re
+import time
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.utils.safestring import mark_safe
@@ -15,12 +16,15 @@ from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv, find_dotenv
 from .rag_utils import RAGSystem
 
+# Configuração do diretório de arquivos
 UPLOAD_DIR = os.path.join(settings.BASE_DIR, 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Configurações da API
 load_dotenv(find_dotenv())
-OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# Inicializa o sistema RAG
 rag_system = RAGSystem(openai_api_key=OPENAI_API_KEY, 
                        persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'))
 
@@ -55,11 +59,21 @@ def convert_markdown_table_to_html(markdown_table):
         return None
 
 def get_file_choices(request):
-    """
-    Helper function to get available file choices from session
-    """
     loaded_files = request.session.get("loaded_files", {})
-    return [(name, name) for name in loaded_files.keys()]
+    choices = []
+    
+    for file_name, info in loaded_files.items():
+        file_type = info.get("type", "desconhecido")
+        if file_type == "pdf":
+            label = f"{file_name} (PDF - {info.get('chunks', '?')} chunks)"
+        elif file_type == "csv":
+            label = f"{file_name} (CSV - {info.get('rows', '?')} linhas)"
+        else:
+            label = file_name
+            
+        choices.append((file_name, label))
+    
+    return choices
 
 def upload_file(request):
     data = {}
@@ -68,14 +82,20 @@ def upload_file(request):
     rag_response = None
     rag_sources = None
     header = []
-    csv_files = {}
-    
+    csv_files = {}    # Inicializar variáveis que precisam existir em todos os caminhos
     form = UploadFileForm()
-    query_form = QueryForm(file_choices=get_file_choices(request))
     
+    # Inicializar o query_form com as escolhas de arquivos atuais
+    if request.method == "POST":
+        query_form = QueryForm(request.POST, file_choices=get_file_choices(request))
+    else:
+        query_form = QueryForm(file_choices=get_file_choices(request))
+    
+    # Inicializa a lista de arquivos na sessão se não existir
     if "loaded_files" not in request.session:
         request.session["loaded_files"] = {}
     
+    # Inicializa o histórico de conversa se não existir
     if "conversation_history" not in request.session:
         request.session["conversation_history"] = []
     
@@ -88,18 +108,21 @@ def upload_file(request):
                 file = request.FILES["file"]
                 file_extension = os.path.splitext(file.name)[1].lower()
                 
+                # Salvar arquivo para processamento
                 file_path = os.path.join(UPLOAD_DIR, file.name)
                 with open(file_path, 'wb+') as destination:
                     for chunk in file.chunks():
                         destination.write(chunk)
                 
                 if file_extension == '.pdf':
+                    # Processar PDF com RAG
                     try:
                         result = rag_system.load_pdf(file_path)
                         file_name = result["file_name"]
                         chunks_count = result["chunks_count"]
                         
-                        loaded_files = request.session.get("loaded_files", {})
+                        # Atualizar lista de arquivos na sessão
+                        loaded_files = request.session.get("loaded_files", {})                        
                         loaded_files[file_name] = {
                             "type": "pdf",
                             "chunks": chunks_count,
@@ -107,10 +130,14 @@ def upload_file(request):
                         }
                         request.session["loaded_files"] = loaded_files
                         
-                        messages.success(request, f"Arquivo PDF '{file_name}' carregado com sucesso!")
+                        # Atualizar o formulário de consulta com a nova lista de arquivos
+                        query_form = QueryForm(file_choices=get_file_choices(request))
+                        
+                        messages.success(request, f"Arquivo PDF '{file_name}' carregado com sucesso! {chunks_count} fragmentos processados.")
                     except Exception as e:
                         messages.error(request, f"Erro ao processar o PDF: {str(e)}")
                 else:
+                    # Processar CSV
                     try:
                         with open(file_path, 'r', encoding='latin-1') as csv_file:
                             decoded_file = csv_file.read().splitlines()
@@ -121,6 +148,7 @@ def upload_file(request):
                         
                         df = pd.DataFrame(data_rows, columns=header)
                         
+                        # Armazenar CSV na sessão
                         csv_files = request.session.get("csv_files", {})
                         file_name = os.path.basename(file_path)
                         csv_files[file_name] = {
@@ -128,7 +156,7 @@ def upload_file(request):
                             "header": header
                         }
                         request.session["csv_files"] = csv_files
-                        
+                          # Atualizar lista de arquivos na sessão
                         loaded_files = request.session.get("loaded_files", {})
                         loaded_files[file_name] = {
                             "type": "csv",
@@ -136,6 +164,9 @@ def upload_file(request):
                             "path": file_path
                         }
                         request.session["loaded_files"] = loaded_files
+                        
+                        # Atualizar o formulário de consulta com a nova lista de arquivos
+                        query_form = QueryForm(file_choices=get_file_choices(request))
                         
                         messages.success(request, f"Arquivo CSV '{file_name}' enviado com sucesso!")
                     except Exception as e:
@@ -147,20 +178,22 @@ def upload_file(request):
                 user_query = query_form.cleaned_data["question"]
                 user_context = query_form.cleaned_data["context"]
                 selected_files = query_form.cleaned_data["selected_files"]
-                pdf_query = query_form.cleaned_data.get("pdf_query") or ""
                 
                 if user_query:
+                    # Recuperar histórico de conversa
                     conversation_history = request.session.get("conversation_history", [])
                     context_with_history = "\n".join(
                         [f"Pergunta: {item['question']}\nResposta: {item['response']}" for item in conversation_history]
                     )
                     full_context = f"{user_context}\n{context_with_history}"
                     
+                    # Verifica se há arquivos carregados
                     loaded_files = request.session.get("loaded_files", {})
                     
                     if not loaded_files:
                         messages.error(request, "Nenhum arquivo foi carregado para análise.")
                     else:
+                        # Verifica os tipos de arquivos selecionados
                         pdf_files = []
                         csv_files_selected = []
                         
@@ -172,29 +205,49 @@ def upload_file(request):
                                 elif file_info.get("type") == "csv":
                                     csv_files_selected.append(file)
                         else:
+                            # Se nenhum arquivo for selecionado, considere todos
                             for file, info in loaded_files.items():
                                 if info.get("type") == "pdf":
                                     pdf_files.append(file)
                                 elif info.get("type") == "csv":
                                     csv_files_selected.append(file)
                         
+                        # Processar PDFs com RAG
                         pdf_response = None
                         pdf_table = None
                         if pdf_files:
                             try:
-                                result = rag_system.query(pdf_query, filter_files=pdf_files if selected_files else None)
+                                # Usar o valor do campo pdf_query do formulário
+                                pdf_extraction_query = query_form.cleaned_data.get("pdf_query")
+
+                                # Usar uma consulta padrão se pdf_query estiver vazio ou não for fornecido
+                                if not pdf_extraction_query:
+                                    pdf_extraction_query = """
+                                    Extraia TODAS as informações sobre:
+                                    1. Redução de alíquotas da CBS ou IBS
+                                    2. Regimes especiais com tratamento tributário diferenciado
+                                    3. Categorias de serviços ou produtos com benefícios fiscais
+                                    
+                                    Liste TODAS as categorias/tipos de serviços que têm qualquer tipo de redução.
+                                    Seja DETALHADO e ESPECÍFICO, mencionando os percentuais de redução quando disponíveis.
+                                    """
+                                
+                                result = rag_system.query(pdf_extraction_query, filter_files=pdf_files if selected_files else None)
                                 pdf_response = result["answer"]
                                 rag_sources = result["sources"]
                                 
+                                # Verificar se há tabela na resposta do PDF
                                 table_match = re.search(r'\|.*\|\n\|[-:| ]+\|\n((?:\|.*\|\n)+)', pdf_response, re.MULTILINE)
                                 if table_match:
                                     markdown_table = table_match.group(0)
                                     pdf_table = convert_markdown_table_to_html(markdown_table)
+                                    # Remover a tabela do texto principal
                                     pdf_response = re.sub(r'\|.*\|\n\|[-:| ]+\|\n((?:\|.*\|\n)+)', '', pdf_response, count=1)
                                 
                             except Exception as e:
                                 messages.error(request, f"Erro ao consultar PDFs: {str(e)}")
                         
+                        # Processar CSVs
                         csv_response = None
                         csv_table = None
                         if csv_files_selected:
@@ -208,6 +261,7 @@ def upload_file(request):
                                     if file_name in all_csv_data:
                                         file_data = all_csv_data[file_name]
                                         df = pd.read_json(file_data["data"])
+                                        # Add file name as prefix to column names to avoid conflicts
                                         df = df.add_prefix(f"{file_name}_")
                                         combined_data.append(df)
                                         combined_headers.extend([f"{file_name}_{h}" for h in file_data["header"]])
@@ -215,6 +269,7 @@ def upload_file(request):
                                 if combined_data:
                                     combined_df = pd.concat(combined_data, axis=1)
                                     
+                                    # Cria uma string com informações sobre o CSV para contextualizar a consulta
                                     csv_context = "Arquivo(s) CSV contém os seguintes dados:\n"
                                     for file_name in csv_files_selected:
                                         if file_name in all_csv_data:
@@ -363,6 +418,10 @@ def upload_file(request):
                             })
                             request.session["conversation_history"] = conversation_history
     
+        elif action == "delete_file":
+            file_name = request.POST.get("file_name", "")
+            if file_name:
+                return delete_file(request, file_name) # Ensure the redirect response is returned
     else:
         # Carregar dados de CSV se existir na sessão
         data = []
@@ -417,3 +476,43 @@ def clear_chroma(request):
         messages.success(request, "Base de conhecimento limpa com sucesso!")
     except Exception as e:
         messages.error(request, f"Erro ao limpar a base de conhecimento: {str(e)}")
+
+def delete_file(request, file_name):
+    try:
+        # Remover arquivo da sessão
+        loaded_files = request.session.get("loaded_files", {})
+        if file_name in loaded_files:
+            file_info = loaded_files[file_name]
+            file_path = file_info.get("path")
+            
+            # Remover do sistema de arquivos se o caminho existir
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                
+            # Se for um PDF, remover da base Chroma também
+            if file_info.get("type") == "pdf":
+                rag_system.delete_document(file_name) # Adicionado
+            
+            # Se for um CSV, remover da sessão de CSVs
+            if file_info.get("type") == "csv":
+                csv_files = request.session.get("csv_files", {}) # Adicionado
+                if file_name in csv_files: # Adicionado
+                    del csv_files[file_name] # Adicionado
+                    request.session["csv_files"] = csv_files # Adicionado
+            
+            # Remover da lista de arquivos carregados
+            del loaded_files[file_name]
+            request.session["loaded_files"] = loaded_files
+            request.session.modified = True  # Forçar a atualização da sessão
+            
+            messages.success(request, f"Arquivo '{file_name}' removido com sucesso!")
+        else:
+            messages.error(request, f"Arquivo '{file_name}' não encontrado para remoção.") # Adicionado
+            
+    except Exception as e:
+        messages.error(request, f"Erro ao remover o arquivo '{file_name}': {str(e)}") # Mensagem de erro melhorada
+    
+    # Adicionar um parâmetro à URL para forçar a atualização da página
+    response = redirect("upload_file")
+    response['Location'] += f'?updated={int(time.time())}'  # Adiciona um timestamp para evitar cache
+    return response

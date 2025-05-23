@@ -27,20 +27,21 @@ class QueryForm(forms.Form):
         max_length=255,
         required=False,
         widget=forms.TextInput(attrs={'placeholder': 'Digite o contexto aqui...'})
-    )
+    )    
     pdf_query = forms.CharField(
         label='Consulta para PDF',
         max_length=1000,
         required=False,
         widget=forms.Textarea(attrs={'placeholder': 'Digite a consulta para o PDF...'})
     )
+    
     selected_files = forms.MultipleChoiceField(
         label='Arquivos selecionados',
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'file-selection-list'}),
         choices=[]
     )
-    
+
     def __init__(self, *args, **kwargs):
         file_choices = kwargs.pop('file_choices', [])
         super(QueryForm, self).__init__(*args, **kwargs)
