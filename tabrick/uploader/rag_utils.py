@@ -209,7 +209,6 @@ class RAGSystem:
             docs_to_delete = self.vectorstore._collection.get(
                 where={"source": file_name}
             )
-            
             if docs_to_delete and len(docs_to_delete['ids']) > 0:
                 # Solução para erro "too many SQL variables": deletar em lotes
                 batch_size = 100  # Reduzindo para um valor bem seguro
@@ -219,9 +218,6 @@ class RAGSystem:
                 for i in range(0, len(ids_to_delete), batch_size):
                     batch_ids = ids_to_delete[i:i + batch_size]
                     self.vectorstore._collection.delete(ids=batch_ids)
-                
-                # Persistir alterações
-                self.vectorstore.persist()
                 
                 # Remover do registro local
                 if file_name in self.loaded_files:
@@ -242,13 +238,11 @@ class RAGSystem:
                         where=where_filter,
                         limit=50  # Limite muito pequeno para evitar problemas
                     )
-                    
                     if not docs_to_delete or len(docs_to_delete['ids']) == 0:
                         break
                         
                     self.vectorstore._collection.delete(ids=docs_to_delete['ids'])
                 
-                self.vectorstore.persist()
                 return True
             except Exception as e2:
                 print(f"Falha no método alternativo de deleção: {e2}")
