@@ -1,18 +1,29 @@
 import os
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
+import pypdf
+from langchain_community.document_loaders import TextLoader
+from google.cloud import documentai_v1 as documentai
+import tempfile
 
 class RAGSystem:
-    def __init__(self, openai_api_key, persist_directory="chroma_db"):
+    def __init__(self, openai_api_key, persist_directory="chroma_db", 
+                 document_ai_project_id=None, document_ai_location=None, 
+                 document_ai_processor_id=None):
         self.openai_api_key = openai_api_key
         self.persist_directory = persist_directory
         self.vectorstore = None
         self.qa_chain = None
         self.loaded_files = {}  # Dicionário para acompanhar os arquivos carregados
+        
+        # Document AI configuration
+        self.document_ai_project_id = document_ai_project_id
+        self.document_ai_location = document_ai_location
+        self.document_ai_processor_id = document_ai_processor_id
         
         # Inicializar embeddings
         self.embeddings = OpenAIEmbeddings(api_key=openai_api_key)
@@ -20,23 +31,67 @@ class RAGSystem:
         # Verificar se já existem dados persistidos
         if os.path.exists(persist_directory):
             self.load_vectorstore()
-    
     def load_pdf(self, pdf_path):
         """Carrega um documento PDF e cria embeddings"""
         # Extrair nome do arquivo do caminho
         file_name = os.path.basename(pdf_path)
+        used_document_ai = False
         
         # Carregar o PDF
         loader = PyPDFLoader(pdf_path)
         pages = loader.load()
+
+        # Se o documento não contém texto legível, usar Document AI
+        if not any(page.page_content.strip() for page in pages):
+            print(f"O PDF {file_name} não tem texto legível. Tentando usar Document AI.")
+            
+            # Verificar se Document AI está configurado
+            if all([self.document_ai_project_id, self.document_ai_location, self.document_ai_processor_id]):
+                extracted_text = self.process_document_with_document_ai(pdf_path)
+                
+                if extracted_text and extracted_text.strip():
+                    print(f"Document AI extraiu texto com sucesso de {file_name}")
+                    used_document_ai = True
+                    
+                    # Criar documentos a partir do texto extraído
+                    pages = []
+                    
+                    # Criar um documento para cada página (aproximadamente 3000 caracteres por página)
+                    page_size = 3000
+                    for i in range(0, len(extracted_text), page_size):
+                        page_text = extracted_text[i:i+page_size]
+                        if page_text.strip():
+                            pages.append(
+                                {
+                                    "page_content": page_text,
+                                    "metadata": {"source": file_name, "page": (i // page_size) + 1}
+                                }
+                            )
+                    
+                    if not pages:
+                        raise ValueError(f"Document AI não conseguiu extrair texto útil de {file_name}")
+                else:
+                    raise ValueError(f"Document AI não conseguiu extrair texto de {file_name}")
+            else:
+                raise ValueError(f"O arquivo {file_name} não contém texto legível e Document AI não está configurado.")
         
-        # Adicionar metadados do arquivo
-        for page in pages:
-            page.metadata["source"] = file_name
-        
-        # Dividir o texto em chunks
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = splitter.split_documents(pages)
+          # Adicionar metadados do arquivo ou processar os dados do Document AI
+        if not used_document_ai:
+            # Caso normal: páginas carregadas pelo PyPDFLoader
+            for page in pages:
+                page.metadata["source"] = file_name
+            
+            # Dividir o texto em chunks
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            chunks = splitter.split_documents(pages)
+        else:
+            # Caso com Document AI: converter os dicionários em objetos Document
+            from langchain.schema import Document
+            documents = [Document(page_content=page["page_content"], metadata=page["metadata"]) for page in pages]
+            
+            # Dividir o texto em chunks
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            chunks = splitter.split_documents(documents)
         
         # Verificar se já existe uma vectorstore
         if self.vectorstore is None:
@@ -49,11 +104,11 @@ class RAGSystem:
         else:
             # Adicionar à vectorstore existente
             self.vectorstore.add_documents(chunks)
-        
-        # Registrar arquivo carregado
+          # Registrar arquivo carregado
         self.loaded_files[file_name] = {
             "path": pdf_path,
-            "chunks": len(chunks)
+            "chunks": len(chunks),
+            "used_document_ai": used_document_ai
         }
         
         # Criar retriever
@@ -61,7 +116,8 @@ class RAGSystem:
         
         return {
             "file_name": file_name,
-            "chunks_count": len(chunks)
+            "chunks_count": len(chunks),
+            "used_document_ai": used_document_ai
         }
     
     def get_loaded_files(self):
@@ -123,8 +179,7 @@ class RAGSystem:
             result = qa_chain.invoke(question)
         else:
             result = self.qa_chain.invoke(question)
-        
-        # Formatar a resposta
+          # Formatar a resposta
         sources = []
         for doc in result["source_documents"]:
             sources.append({
@@ -132,9 +187,10 @@ class RAGSystem:
                 "page": doc.metadata.get("page", "desconhecida"),
                 "source": doc.metadata.get("source", "desconhecido")
             })
-            return {
-                "answer": result["result"],
-                "sources": sources
+        
+        return {
+            "answer": result["result"],
+            "sources": sources
         }
 
     def delete_document(self, file_name):
@@ -197,3 +253,54 @@ class RAGSystem:
             except Exception as e2:
                 print(f"Falha no método alternativo de deleção: {e2}")
                 raise
+    
+    def is_pdf_editable(self, pdf_path):
+        """
+        Check if a PDF contains searchable text.
+        Returns True if the PDF contains searchable text, False otherwise.
+        """
+        try:
+            # Open the PDF
+            pdf_reader = pypdf.PdfReader(pdf_path)
+            
+            # Check at least first 3 pages for text (or all pages if less than 3)
+            pages_to_check = min(3, len(pdf_reader.pages))
+            
+            for i in range(pages_to_check):
+                text = pdf_reader.pages[i].extract_text()
+                # If we found text on any page, the PDF is likely editable
+                if text.strip():
+                    return True
+            
+            # If we checked all pages and found no text, the PDF is likely non-editable
+            return False
+        except Exception as e:
+            print(f"Error checking PDF editability: {e}")
+            # In case of error, assume it's not editable to use Document AI
+            return False
+    
+    def process_document_with_document_ai(self, file_path):
+        """
+        Process a document using Google Document AI and return the extracted text.
+        """
+        if not all([self.document_ai_project_id, self.document_ai_location, self.document_ai_processor_id]):
+            raise ValueError("Document AI configuration is not complete. Please provide project_id, location, and processor_id.")
+            
+        opts = {"api_endpoint": f"{self.document_ai_location}-documentai.googleapis.com"}
+        client = documentai.DocumentProcessorServiceClient(client_options=opts)
+        
+        name = client.processor_path(self.document_ai_project_id, self.document_ai_location, self.document_ai_processor_id)
+        
+        with open(file_path, "rb") as image:
+            image_content = image.read()
+            
+        raw_document = documentai.RawDocument(content=image_content, mime_type="application/pdf")
+        request = documentai.ProcessRequest(name=name, raw_document=raw_document)
+        
+        try:
+            result = client.process_document(request=request)
+            document = result.document
+            return document.text
+        except Exception as e:
+            print(f"Error processing document with Document AI: {e}")
+            return None

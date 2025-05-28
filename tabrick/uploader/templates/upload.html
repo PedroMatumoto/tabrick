@@ -1,4 +1,4 @@
-{% extends 'base.html' %} {% load widget_tweaks %} {% block title %}Upload de
+{% extends 'base.html' %} {% load widget_tweaks %} {% load dict_filters %} {% block title %}Upload de
 Arquivo{% endblock %} 
 
 {% block extra_head %}
@@ -85,9 +85,8 @@ Arquivo{% endblock %}
         {% for value, text in query_form.selected_files.field.choices %}      <li class="d-flex justify-content-between align-items-center">
             <div class="file-item">
               <input type="checkbox" name="selected_files" value="{{ value }}" id="id_selected_files_{{ forloop.counter0 }}" class="form-check-input" 
-                {% if value in query_form.selected_files.value %}checked{% endif %}>
-              <label for="id_selected_files_{{ forloop.counter0 }}" class="form-check-label">
-                {% if '.pdf' in value %}
+                {% if value in query_form.selected_files.value %}checked{% endif %}>              <label for="id_selected_files_{{ forloop.counter0 }}" class="form-check-label">
+                {% if '.pdf' in value or '.PDF' in value %}
                   <i class="fas fa-file-pdf file-icon file-pdf"></i>
                 {% elif '.csv' in value %}
                   <i class="fas fa-file-csv file-icon file-csv"></i>
@@ -95,6 +94,11 @@ Arquivo{% endblock %}
                   <i class="fas fa-file file-icon"></i>
                 {% endif %}
                 {{ text }}
+                {% with file_info=loaded_files|get_item:value %}
+                  {% if file_info.used_document_ai %}
+                    <span class="badge bg-info text-dark ms-2" title="Processado com Document AI">AI</span>
+                  {% endif %}
+                {% endwith %}
               </label>
             </div>
             <div class="file-actions">
@@ -159,42 +163,88 @@ Arquivo{% endblock %}
 {% endif %}
 
 {% if conversation_history %}
-    <h3 class="mt-4">Histórico da Conversa</h3>
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <div class="d-flex">
-            <form method="POST" class="me-2">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="clear_chroma">
-                <button type="submit" class="btn btn-danger btn-sm">Limpar Base de Conhecimento</button>
-            </form>
+    <div class="conversation-section mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0"><i class="fas fa-comments me-2"></i>Histórico da Conversa</h3>
             
-            <form method="POST" class="me-2">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="reset_chroma">
-                <button type="submit" class="btn btn-danger btn-sm" title="Use apenas em caso de erros graves com a base de conhecimento">
-                    <i class="fas fa-exclamation-triangle"></i> Reset de Emergência
-                </button>
-            </form>
+            <div class="d-flex">
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_conversation">
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="fas fa-broom me-1"></i> Limpar Histórico
+                    </button>
+                </form>
+            </div>
         </div>
         
-        <form method="POST">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="clear_conversation">
-            <button type="submit" class="btn btn-warning btn-sm">Limpar Histórico da Conversa</button>
-        </form>
-    </div>
-    <div class="conversation-history">
-        {% for item in conversation_history %}
-            <div class="card mb-3">
-                <div class="card-header">
-                    <strong>Pergunta:</strong> {{ item.question }}
-                </div>
-                <div class="card-body">
-                    <strong>Resposta:</strong> 
-                    <div>{{ item.response|safe }}</div>
-                </div>
+        <div class="conversation-controls mb-3 pb-2 border-bottom">
+            <div class="d-flex flex-wrap gap-2">
+                <form method="POST" class="me-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_chroma">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="fas fa-database me-1"></i> Limpar Base de Conhecimento
+                    </button>
+                </form>
+                
+                <form method="POST" class="me-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reset_chroma">
+                    <button type="submit" class="btn btn-danger btn-sm" title="Use apenas em caso de erros graves com a base de conhecimento">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Reset de Emergência
+                    </button>
+                </form>
             </div>
-        {% endfor %}
+        </div>
+        
+        <div class="conversation-history">
+            {% for item in conversation_history reversed %}
+                <div class="conversation-item mb-4">
+                    <div class="timestamp text-muted small mb-1 text-end">
+                        <i class="far fa-clock me-1"></i> {{forloop.revcounter}}
+                    </div>
+                    
+                    <div class="user-question p-3 rounded-3 mb-2">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-circle bg-primary me-2">
+                                <i class="fa-solid fa-user text-white"></i>
+                            </div>
+                            <strong>Pergunta:</strong>
+                        </div>
+                        <div class="ms-4">{{ item.question }}</div>
+                    </div>
+                    
+                    <div class="system-response p-3 rounded-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-circle bg-success me-2">
+                                <i class="fa-solid fa-robot text-white"></i>
+                            </div>
+                            <strong>Resposta:</strong>
+                        </div>
+                        <div class="response-content ms-4">{{ item.response|markdown_to_html }}</div>
+                    </div>
+                    
+                    {% if item.files %}
+                    <div class="files-used mt-2">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-alt me-2 text-secondary"></i>
+                            <span class="text-muted small">Arquivos consultados:</span>
+                            <div class="ms-2">
+                                {% for file in item.files %}
+                                    <span class="badge bg-light text-dark border me-1">{{ file }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if not forloop.last %}
+                    <div class="conversation-separator mb-4"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
     </div>
 {% endif %}
 

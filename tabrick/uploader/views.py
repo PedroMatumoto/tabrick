@@ -24,9 +24,19 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 load_dotenv(find_dotenv())
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Inicializa o sistema RAG
-rag_system = RAGSystem(openai_api_key=OPENAI_API_KEY, 
-                       persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'))
+# Configurações do Document AI
+DOCUMENT_AI_PROJECT_ID = os.getenv("DOCUMENT_AI_PROJECT_ID", "")
+DOCUMENT_AI_LOCATION = os.getenv("DOCUMENT_AI_LOCATION", "")
+DOCUMENT_AI_PROCESSOR_ID = os.getenv("DOCUMENT_AI_PROCESSOR_ID", "")
+
+# Inicializa o sistema RAG com suporte a Document AI
+rag_system = RAGSystem(
+    openai_api_key=OPENAI_API_KEY, 
+    persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'),
+    document_ai_project_id=DOCUMENT_AI_PROJECT_ID,
+    document_ai_location=DOCUMENT_AI_LOCATION,
+    document_ai_processor_id=DOCUMENT_AI_PROCESSOR_ID
+)
 
 def convert_markdown_table_to_html(markdown_table):
     """
@@ -65,7 +75,9 @@ def get_file_choices(request):
     for file_name, info in loaded_files.items():
         file_type = info.get("type", "desconhecido")
         if file_type == "pdf":
-            label = f"{file_name} (PDF - {info.get('chunks', '?')} chunks)"
+            # Adicionar indicador se o documento foi processado com Document AI
+            doc_ai_indicator = " (Document AI)" if info.get("used_document_ai") else ""
+            label = f"{file_name} (PDF{doc_ai_indicator} - {info.get('chunks', '?')} chunks)"
         elif file_type == "csv":
             label = f"{file_name} (CSV - {info.get('rows', '?')} linhas)"
         else:
@@ -120,20 +132,25 @@ def upload_file(request):
                         result = rag_system.load_pdf(file_path)
                         file_name = result["file_name"]
                         chunks_count = result["chunks_count"]
+                          # Verificar se Document AI foi utilizado
+                        used_document_ai = result.get("used_document_ai", False)
                         
                         # Atualizar lista de arquivos na sessão
                         loaded_files = request.session.get("loaded_files", {})                        
                         loaded_files[file_name] = {
                             "type": "pdf",
                             "chunks": chunks_count,
-                            "path": file_path
+                            "path": file_path,
+                            "used_document_ai": used_document_ai
                         }
                         request.session["loaded_files"] = loaded_files
                         
                         # Atualizar o formulário de consulta com a nova lista de arquivos
                         query_form = QueryForm(file_choices=get_file_choices(request))
                         
-                        messages.success(request, f"Arquivo PDF '{file_name}' carregado com sucesso! {chunks_count} fragmentos processados.")
+                        # Adicionar informação sobre o uso do Document AI na mensagem
+                        document_ai_msg = " (usado Document AI para extração de texto)" if used_document_ai else ""
+                        messages.success(request, f"Arquivo PDF '{file_name}' carregado com sucesso!{document_ai_msg} {chunks_count} fragmentos processados.")
                     except Exception as e:
                         messages.error(request, f"Erro ao processar o PDF: {str(e)}")
                 else:
@@ -230,6 +247,7 @@ def upload_file(request):
                                     
                                     Liste TODAS as categorias/tipos de serviços que têm qualquer tipo de redução.
                                     Seja DETALHADO e ESPECÍFICO, mencionando os percentuais de redução quando disponíveis.
+                                    Responda em MARKDOWN, incluindo tabelas quando necessário.
                                     """
                                 
                                 result = rag_system.query(pdf_extraction_query, filter_files=pdf_files if selected_files else None)
@@ -350,8 +368,8 @@ def upload_file(request):
                                         Mostre exemplos específicos quando relevante.
                                         """
 
-                                    system_prompt = """Você é um assistente especializado em análise de dados que fala português.
-                                    Sua tarefa é analisar dataframes pandas e responder perguntas sobre eles em português.
+                                    system_prompt = """Você é um assistente especializado em análise de dados que fala PORTUGUÊS.
+                                    Sua tarefa é analisar dataframes pandas e responder perguntas sobre eles em PORTUGUÊS.
                                     Ao analisar dados:
                                     1. Examine cuidadosamente as colunas do dataframe para entender a estrutura dos dados
                                     2. Execute análises estatísticas quando necessário (média, mediana, contagens, etc)
@@ -359,7 +377,8 @@ def upload_file(request):
                                     4. Se encontrar problemas nos dados, explique-os claramente
                                     5. Forneça exemplos concretos dos dados para apoiar suas conclusões
                                     
-                                    Importante: O usuário está consultando em português, então responda em português também.
+                                    Importante: O usuário está consultando em PORTUGUÊS, então responda em PORTUGUÊS também.
+                                    Responda essa pergunta em markdown, incluindo tabelas e visualizações quando necessário.
                                     """
                                     
                                     # Usar o agente para analisar o dataframe com o contexto
@@ -374,20 +393,21 @@ def upload_file(request):
                                     
                                     csv_result = agent.invoke(full_query)
                                     csv_response = csv_result["output"]
-                                    
-                                    # Verificar se há tabela na resposta do CSV
+                                      # Verificar se há tabela na resposta do CSV
                                     table_match = re.search(r'\|.*\|\n\|[-:| ]+\|\n((?:\|.*\|\n)+)', csv_response, re.MULTILINE)
                                     if table_match:
                                         markdown_table = table_match.group(0)
                                         csv_table = convert_markdown_table_to_html(markdown_table)
                                         # Remover a tabela do texto principal
-                                        csv_response = re.sub(r'\|.*\|\n\|[-:| ]+\|\n((?:\|.*\|\n)+)', '', csv_response, count=1)
-                                        csv_response = mark_safe(markdown.markdown(csv_response))
-                                
-                                # Adicionar à conversa
+                                        csv_response_plain = re.sub(r'\|.*\|\n\|[-:| ]+\|\n((?:\|.*\|\n)+)', '', csv_response, count=1)
+                                        # Guardar a versão raw para o histórico
+                                        csv_response_html = mark_safe(markdown.markdown(csv_response_plain))
+                                        # Para exibição imediata, usamos a versão HTML
+                                        csv_response = csv_response_html                                # Adicionar à conversa - usar a versão texto antes da conversão para HTML
+                                # Importante: armazenar a versão markdown original, não a versão HTML processada
                                 conversation_history.append({
                                     "question": user_query,
-                                    "response": csv_response,
+                                    "response": csv_response_plain if 'csv_response_plain' in locals() else csv_response,
                                     "files": csv_files_selected
                                 })
                                 request.session["conversation_history"] = conversation_history
@@ -420,10 +440,10 @@ def upload_file(request):
                                     table_response += "<hr>" + table_html
                                 else:
                                     table_response = table_html
-                                    
-                        # Adicionar à conversa apenas uma vez
+                                      # Adicionar à conversa apenas uma vez
                         if combined_response:
                             files_used = pdf_files + csv_files_selected
+                            # Guardar a resposta no formato markdown, não no formato HTML
                             conversation_history.append({
                                 "question": user_query,
                                 "response": combined_response,
@@ -490,11 +510,15 @@ def clear_chroma(request):
         if os.path.exists(chroma_dir):
             shutil.rmtree(chroma_dir)
             os.makedirs(chroma_dir, exist_ok=True)
-        
-        # Reinicializar o sistema RAG
+          # Reinicializar o sistema RAG com Document AI
         global rag_system
-        rag_system = RAGSystem(openai_api_key=OPENAI_API_KEY, 
-                               persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'))
+        rag_system = RAGSystem(
+            openai_api_key=OPENAI_API_KEY, 
+            persist_directory=os.path.join(settings.BASE_DIR, 'chroma_db'),
+            document_ai_project_id=DOCUMENT_AI_PROJECT_ID,
+            document_ai_location=DOCUMENT_AI_LOCATION,
+            document_ai_processor_id=DOCUMENT_AI_PROCESSOR_ID
+        )
         
         # Limpar arquivos PDF da sessão
         loaded_files = request.session.get("loaded_files", {})

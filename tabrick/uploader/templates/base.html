@@ -49,6 +49,15 @@
         margin-bottom: 2rem;
       }
       
+      /* Badge para Document AI */
+      .badge.bg-info {
+        background-color: #0dcaf0 !important;
+        font-size: 0.7rem;
+        font-weight: 500;
+        padding: 0.2rem 0.5rem;
+        vertical-align: middle;
+      }
+      
       .btn-primary {
         background-color: var(--primary);
         border-color: var(--primary);
@@ -57,6 +66,84 @@
       .btn-primary:hover {
         background-color: var(--primary-dark);
         border-color: var(--primary-dark);
+      }
+
+      .conversation-history {
+            max-width: 100%;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            padding: 20px;
+        }
+        
+      .conversation-item {
+          position: relative;
+      }
+      
+      .user-question {
+          background-color: #e9ecef;
+          border-left: 4px solid #0d6efd;
+      }
+      
+      .system-response {
+          background-color: #f8f9fa;
+          border-left: 4px solid #198754;
+      }
+      
+      .avatar-circle {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+      }
+      
+      .response-content {
+          line-height: 1.5;
+      }
+      
+      .response-content p {
+          margin-bottom: 1rem;
+      }
+      
+      .response-content pre {
+          background-color: #f1f1f1;
+          padding: 10px;
+          border-radius: 5px;
+          overflow-x: auto;
+      }
+      
+      .conversation-separator {
+          height: 1px;
+          background: linear-gradient(to right, transparent, #dee2e6, transparent);
+          margin: 20px 0;
+      }
+      
+      .files-used .badge {
+          font-size: 0.75em;
+          margin-left: 4px;
+      }
+      
+      /* Estilo para tabelas no markdown */
+      .response-content table {
+          border-collapse: collapse;
+          width: 100%;
+          margin-bottom: 1rem;
+      }
+      
+      .response-content table th,
+      .response-content table td {
+          padding: 8px;
+          border: 1px solid #dee2e6;
+      }
+      
+      .response-content table th {
+          background-color: #e9ecef;
+          font-weight: bold;
+      }
+      
+      .response-content table tr:nth-child(even) {
+          background-color: #f2f2f2;
       }
       
       .btn-danger {
