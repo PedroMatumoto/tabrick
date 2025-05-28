@@ -67,6 +67,41 @@
         background-color: var(--primary-dark);
         border-color: var(--primary-dark);
       }
+      
+      /* Indicador de carregamento */
+      .loading-indicator {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      
+      .spinner-container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      
+      .loading-spinner {
+        width: 3rem;
+        height: 3rem;
+        color: var(--primary);
+      }
+      
+      .loading-text {
+        margin-top: 15px;
+        font-weight: 500;
+        color: var(--dark);
+      }
 
       .conversation-history {
             max-width: 100%;
@@ -350,7 +385,7 @@
       {% csrf_token %}
       <input type="hidden" name="file_name" id="file_name_to_delete">
       <input type="hidden" name="action" value="delete_file">
-    </form>
+    </form>  
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -379,8 +414,7 @@
       var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)
       });
-      
-      // Adicionar event listener para o botão de enviar pergunta
+        // Adicionar event listener para o botão de enviar pergunta e esconder o indicador de carregamento
       document.addEventListener('DOMContentLoaded', function() {
         const askButton = document.getElementById('ask_question_button');
         if (askButton) {
@@ -388,7 +422,11 @@
             console.log('Botão de enviar pergunta clicado');
           });
         }
-        
+          // Esconder o indicador de carregamento após o carregamento da página
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) {
+          loadingIndicator.style.display = 'none';
+        }
       });
       
       // Função para exportar tabela para CSV

@@ -45,11 +45,66 @@ Arquivo{% endblock %}
         form.submit();
       }
     });
+    
+    // Função para mostrar indicador de carregamento
+    function showLoading(message) {
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const loadingText = document.getElementById('loadingText');
+      
+      loadingText.textContent = message || 'Processando...';
+      loadingIndicator.style.display = 'flex';
+    }
+    
+    // Configurar indicadores de carregamento nos formulários
+    const uploadForm = document.querySelector('form[enctype="multipart/form-data"]');
+    const questionForm = document.querySelector('form:not([enctype])');
+    
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', function() {
+        showLoading('Fazendo upload e processando o arquivo...');
+      });
+    }
+    
+    if (questionForm) {
+      questionForm.addEventListener('submit', function(e) {
+        // Apenas mostrar o carregamento se a ação for "ask_question"
+        if (e.submitter && e.submitter.value === 'ask_question') {
+          showLoading('Consultando informações e gerando resposta...');
+        }
+      });
+    }
+    
+    // Capturar outras ações que podem demorar
+    const allForms = document.querySelectorAll('form');
+    allForms.forEach(form => {
+      form.addEventListener('submit', function(e) {
+        const actionInput = form.querySelector('input[name="action"]');
+        if (actionInput) {
+          if (actionInput.value === 'clear_conversation') {
+            showLoading('Limpando histórico de conversas...');
+          } else if (actionInput.value === 'clear_chroma') {
+            showLoading('Limpando base de conhecimento...');
+          } else if (actionInput.value === 'reset_chroma') {
+            showLoading('Reiniciando base de conhecimento...');
+          }
+        }
+      });
+    });
   });
 </script>
 {% endblock %}
 
 {% block content %}
+<!-- Indicador de carregamento -->
+<div id="loadingIndicator" class="loading-indicator">
+  <div class="spinner-container">
+    <div class="spinner-border loading-spinner" role="status">
+      <span class="visually-hidden">Carregando...</span>
+    </div>
+    <div id="loadingText" class="loading-text">Processando...</div>
+  </div>
+</div>
+
 <form method="post" enctype="multipart/form-data" class="mb-4">
   {% csrf_token %}
   <div class="mb-3">
@@ -113,12 +168,12 @@ Arquivo{% endblock %}
       </ul>
     </div>
     <small class="form-text text-muted">Selecione as fontes que deseja consultar.</small>
-  </div>
-  <button
+  </div>  <button
     type="submit"
     name="action"
     value="ask_question"
     class="btn btn-primary"
+    id="ask_question_button"
   >
     Enviar Pergunta
   </button>
