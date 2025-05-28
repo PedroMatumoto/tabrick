@@ -11,10 +11,14 @@
 
 # Videos
 
+## v2 Demo Video
+https://github.com/user-attachments/assets/0e9e7f45-aedc-4fb6-ad29-4b12e0ec5516
+
 
 ## v1 Demo Video
 https://github.com/user-attachments/assets/f23bfd36-1a87-47a1-804d-7e17d52cb008
 
+------
 ## ✨ Key Features
 
 ### 📄 PDF Processing
