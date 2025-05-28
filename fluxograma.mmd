@@ -1,0 +1,62 @@
+graph TD
+    A[User] --> B(Access /upload URL);
+
+    B --> C[views.upload_file Controller];
+    C --> D{Request Method?};
+    D -- GET --> E[Render upload.html with Forms];
+
+    D -- POST --> F{POST Action Value?};
+
+    F -- "upload_file" --> G[Validate UploadFileForm];
+    G -- Valid --> H{File Type?};
+    H -- ".pdf" --> I[Save PDF to 'uploads/'];
+    I --> J[rag_system.load_pdf];
+    J --> K[Update Session: loaded_files PDF];
+    K --> L[Display Message & Render Forms];
+    
+    H -- ".csv" --> M[Save CSV to 'uploads/'];
+    M --> N[Read CSV to DataFrame];
+    N --> O[Update Session: loaded_files CSV & csv_files DataFrame];
+    O --> L;
+    G -- Invalid --> L;
+
+    F -- "ask_question" --> P[Validate QueryForm];
+    P -- Valid --> Q[Get Query & Selected Files];
+    Q --> R{Files Loaded/Selected?};
+    R -- No --> S[Message: No files & Render Forms];
+    
+    R -- Yes --> T_Start[Initialize Query Process];
+    T_Start --> T_PDF_Check{PDFs Selected?};
+
+    T_PDF_Check -- Yes --> U[rag_system.query];
+    U --> V[Store PDF Answer/Table];
+    V --> T_CSV_Check;
+    T_PDF_Check -- No --> T_CSV_Check;
+
+    T_CSV_Check{CSVs Selected?};
+    T_CSV_Check -- Yes --> X[Load/Combine CSV DataFrames];
+    X --> Y[Invoke Pandas Agent];
+    Y --> Z[Store CSV Answer/Table];
+    Z --> T_Combine_Answers;
+    T_CSV_Check -- No --> T_Combine_Answers;
+    
+    V -. If no CSV path .-> T_Combine_Answers;
+
+
+    T_Combine_Answers[Combine PDF & CSV Answers if they exist];
+    T_Combine_Answers --> AE[Update Session: conversation_history];
+    AE --> AF[Render upload.html with Results & History];
+    
+    P -- Invalid --> S;
+    L --> E; 
+    S --> E; 
+    AF --> E; 
+
+    F -- "delete_file" --> AG[Get file_name_to_delete];
+    AG --> AH[Update Session: Remove file info];
+    AH --> AI[Delete File from 'uploads/'];
+    AI --> AJ{File was PDF?};
+    AJ -- Yes --> AK[rag_system.delete_document];
+    AK --> AL[Display Message & Render Forms];
+    AJ -- No --> AL;
+    AL --> E;

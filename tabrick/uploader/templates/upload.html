@@ -1,5 +1,55 @@
-{% extends 'base.html' %} {% load widget_tweaks %} {% block title %}Upload de
-Arquivo{% endblock %} {% block content %}
+{% extends 'base.html' %} {% load widget_tweaks %} {% load dict_filters %} {% block title %}Upload de
+Arquivo{% endblock %} 
+
+{% block extra_head %}
+<script>
+  // Função para atualizar a lista de seleção de arquivos
+  document.addEventListener('DOMContentLoaded', function() {
+    // Adicionar handler para botões de exclusão de arquivo
+    document.addEventListener('click', function(event) {
+      const deleteBtn = event.target.closest('.delete-file-btn');
+      if (deleteBtn) {
+        if(!confirm('Tem certeza que deseja excluir este arquivo?')) {
+          return;
+        }
+        
+        // Criar um formulário dinamicamente para executar a ação de exclusão
+        const fileName = deleteBtn.getAttribute('data-filename');
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.style.display = 'none';
+        
+        // Adicionar token CSRF
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
+        
+        // Adicionar nome do arquivo e ação
+        const fileNameInput = document.createElement('input');
+        fileNameInput.type = 'hidden';
+        fileNameInput.name = 'file_name';
+        fileNameInput.value = fileName;
+        form.appendChild(fileNameInput);
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'delete_file';
+        form.appendChild(actionInput);
+        
+        // Adicionar o formulário ao documento e enviá-lo
+        document.body.appendChild(form);
+        form.submit();
+      }
+    });
+  });
+</script>
+{% endblock %}
+
+{% block content %}
 <form method="post" enctype="multipart/form-data" class="mb-4">
   {% csrf_token %}
   <div class="mb-3">
@@ -11,7 +61,7 @@ Arquivo{% endblock %} {% block content %}
     value="upload_file"
     class="btn btn-primary mb-4"
   >
-    Enviar CSV
+    Enviar Arquivo
   </button>
 </form>
 
@@ -19,11 +69,50 @@ Arquivo{% endblock %} {% block content %}
   {% csrf_token %}
   <div class="mb-3">
     <label for="context">Contexto:</label>
-    {% render_field form.context class="form-control" %}
+    {% render_field query_form.context class="form-control" %}
+  </div>
+  <div class="mb-3">
+    <label for="pdf_query">Consulta para PDF:</label>
+    {% render_field query_form.pdf_query class="form-control" %}
   </div>
   <div class="mb-3">
     <label for="question">Pergunta:</label>
-    {% render_field form.question class="form-control" %}
+    {% render_field query_form.question class="form-control" %}
+  </div>  <div class="mb-3">
+    <label for="selected_files">{{ query_form.selected_files.label }}:</label>
+    <div class="checkbox-group">
+      <ul>
+        {% for value, text in query_form.selected_files.field.choices %}      <li class="d-flex justify-content-between align-items-center">
+            <div class="file-item">
+              <input type="checkbox" name="selected_files" value="{{ value }}" id="id_selected_files_{{ forloop.counter0 }}" class="form-check-input" 
+                {% if value in query_form.selected_files.value %}checked{% endif %}>              <label for="id_selected_files_{{ forloop.counter0 }}" class="form-check-label">
+                {% if '.pdf' in value or '.PDF' in value %}
+                  <i class="fas fa-file-pdf file-icon file-pdf"></i>
+                {% elif '.csv' in value %}
+                  <i class="fas fa-file-csv file-icon file-csv"></i>
+                {% else %}
+                  <i class="fas fa-file file-icon"></i>
+                {% endif %}
+                {{ text }}
+                {% with file_info=loaded_files|get_item:value %}
+                  {% if file_info.used_document_ai %}
+                    <span class="badge bg-info text-dark ms-2" title="Processado com Document AI">AI</span>
+                  {% endif %}
+                {% endwith %}
+              </label>
+            </div>
+            <div class="file-actions">
+              <button type="button" class="btn btn-danger btn-sm delete-file-btn" data-filename="{{ value }}" title="Excluir arquivo">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </li>
+        {% empty %}
+          <li class="text-muted">Nenhum arquivo disponível</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <small class="form-text text-muted">Selecione as fontes que deseja consultar.</small>
   </div>
   <button
     type="submit"
@@ -36,10 +125,131 @@ Arquivo{% endblock %} {% block content %}
 </form>
 
 {% if agent_response %}
-<h2 class="mt-5">Resposta do Agente</h2>
-<div class="agent-response mt-3">{{ agent_response|safe }}</div>
-{% endif %} {% if data %}
-<h2 class="mt-5">Conteúdo do Arquivo</h2>
+    <div class="agent-full-response mt-4">
+        <h3>Resposta:</h3>
+        {{ agent_response|safe }}
+    </div>
+{% endif %}
+
+{% if table_response %}
+    <div class="agent-table-response mt-4">
+        <h3>Tabela de Resultados:</h3>
+        {{ table_response|safe }}
+        <a href="#" class="btn btn-success mt-2" onclick="exportTableToCSV('tabela_resposta.csv')">Baixar Tabela</a>
+    </div>
+{% endif %}
+
+{% if rag_sources %}
+    <div class="rag-sources mt-4">
+        <h3>Fontes Consultadas:</h3>
+        <div class="accordion" id="sourcesAccordion">
+            {% for source in rag_sources %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#source{{ forloop.counter }}" aria-expanded="false">
+                        Fonte {{ forloop.counter }} (Página: {{ source.page }})
+                    </button>
+                </h2>
+                <div id="source{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#sourcesAccordion">
+                    <div class="accordion-body">
+                        <pre class="source-content">{{ source.content }}</pre>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+
+{% if conversation_history %}
+    <div class="conversation-section mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0"><i class="fas fa-comments me-2"></i>Histórico da Conversa</h3>
+            
+            <div class="d-flex">
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_conversation">
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="fas fa-broom me-1"></i> Limpar Histórico
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="conversation-controls mb-3 pb-2 border-bottom">
+            <div class="d-flex flex-wrap gap-2">
+                <form method="POST" class="me-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_chroma">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="fas fa-database me-1"></i> Limpar Base de Conhecimento
+                    </button>
+                </form>
+                
+                <form method="POST" class="me-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reset_chroma">
+                    <button type="submit" class="btn btn-danger btn-sm" title="Use apenas em caso de erros graves com a base de conhecimento">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Reset de Emergência
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="conversation-history">
+            {% for item in conversation_history reversed %}
+                <div class="conversation-item mb-4">
+                    <div class="timestamp text-muted small mb-1 text-end">
+                        <i class="far fa-clock me-1"></i> {{forloop.revcounter}}
+                    </div>
+                    
+                    <div class="user-question p-3 rounded-3 mb-2">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-circle bg-primary me-2">
+                                <i class="fa-solid fa-user text-white"></i>
+                            </div>
+                            <strong>Pergunta:</strong>
+                        </div>
+                        <div class="ms-4">{{ item.question }}</div>
+                    </div>
+                    
+                    <div class="system-response p-3 rounded-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-circle bg-success me-2">
+                                <i class="fa-solid fa-robot text-white"></i>
+                            </div>
+                            <strong>Resposta:</strong>
+                        </div>
+                        <div class="response-content ms-4">{{ item.response|markdown_to_html }}</div>
+                    </div>
+                    
+                    {% if item.files %}
+                    <div class="files-used mt-2">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-alt me-2 text-secondary"></i>
+                            <span class="text-muted small">Arquivos consultados:</span>
+                            <div class="ms-2">
+                                {% for file in item.files %}
+                                    <span class="badge bg-light text-dark border me-1">{{ file }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if not forloop.last %}
+                    <div class="conversation-separator mb-4"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+
+{% if data %}
+<h2 class="mt-5">Conteúdo do Arquivo CSV</h2>
 <table class="table table-striped table-hover mt-3">
   <thead>
     <tr>
@@ -58,4 +268,12 @@ Arquivo{% endblock %} {% block content %}
     {% endfor %}
   </tbody>
 </table>
-{% endif %} {% endblock %}
+{% endif %}
+{% endblock %}
+
+<!-- Formulário oculto para exclusão de arquivos -->
+<form id="delete_file_form" method="post" style="display: none;">
+  {% csrf_token %}
+  <input type="hidden" id="file_name_to_delete" name="file_name" value="">
+  <input type="hidden" name="action" value="delete_file">
+</form>
