@@ -5,16 +5,22 @@ Arquivo{% endblock %}
 <script>
   // Função para atualizar a lista de seleção de arquivos
   document.addEventListener('DOMContentLoaded', function() {
-    // Adicionar handler para botões de exclusão de arquivo
+    // Adicionar handler para botões de exclusão de arquivo    
     document.addEventListener('click', function(event) {
       const deleteBtn = event.target.closest('.delete-file-btn');
       if (deleteBtn) {
         if(!confirm('Tem certeza que deseja excluir este arquivo?')) {
           return;
         }
+          // Mostrar indicador de carregamento
+        const fileName = deleteBtn.getAttribute('data-filename');
+        if (typeof window.showLoading === 'function') {
+          window.showLoading(`Excluindo arquivo "${fileName}"...`);
+        } else {
+          showLoading(`Excluindo arquivo "${fileName}"...`);
+        }
         
         // Criar um formulário dinamicamente para executar a ação de exclusão
-        const fileName = deleteBtn.getAttribute('data-filename');
         const form = document.createElement('form');
         form.method = 'POST';
         form.style.display = 'none';

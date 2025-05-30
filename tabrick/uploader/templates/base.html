@@ -67,8 +67,7 @@
         background-color: var(--primary-dark);
         border-color: var(--primary-dark);
       }
-      
-      /* Indicador de carregamento */
+        /* Indicador de carregamento */
       .loading-indicator {
         display: none;
         position: fixed;
@@ -76,7 +75,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
+        background-color: rgba(0, 0, 0, 0.6);
         z-index: 9999;
         justify-content: center;
         align-items: center;
@@ -89,6 +88,7 @@
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         text-align: center;
+        min-width: 250px;
       }
       
       .loading-spinner {
@@ -101,6 +101,7 @@
         margin-top: 15px;
         font-weight: 500;
         color: var(--dark);
+        font-size: 1rem;
       }
 
       .conversation-history {
@@ -413,8 +414,7 @@
       var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
       var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)
-      });
-        // Adicionar event listener para o botão de enviar pergunta e esconder o indicador de carregamento
+      });        // Adicionar event listener para o botão de enviar pergunta e esconder o indicador de carregamento
       document.addEventListener('DOMContentLoaded', function() {
         const askButton = document.getElementById('ask_question_button');
         if (askButton) {
@@ -427,6 +427,16 @@
         if (loadingIndicator) {
           loadingIndicator.style.display = 'none';
         }
+        
+        // Função global para mostrar o carregamento
+        window.showLoading = function(message) {
+          const loadingIndicator = document.getElementById('loadingIndicator');
+          const loadingText = document.getElementById('loadingText');
+          if (loadingIndicator && loadingText) {
+            loadingText.textContent = message || 'Processando...';
+            loadingIndicator.style.display = 'flex';
+          }
+        };
       });
       
       // Função para exportar tabela para CSV
